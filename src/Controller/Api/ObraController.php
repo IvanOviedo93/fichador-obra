@@ -12,7 +12,7 @@ use Symfony\Component\Routing\Annotation\Route;
 use Symfony\Component\Serializer\SerializerInterface;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
 
-class ObraController extends AbstractController
+class ObraController
 {
     #[Route('/api/obras', methods: ['GET'])]
     public function index(ObraRepository $obraRepository, SerializerInterface $serializer): JsonResponse
