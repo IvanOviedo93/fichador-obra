@@ -12,7 +12,7 @@ use Symfony\Component\Routing\Annotation\Route;
 use Symfony\Component\Serializer\SerializerInterface;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
 
-class HerramientaController extends AbstractController
+class HerramientaController
 {
     #[Route('/api/herramientas', methods: ['GET'])]
     public function index(HerramientaRepository $repo, SerializerInterface $serializer): JsonResponse

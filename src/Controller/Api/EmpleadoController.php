@@ -3,97 +3,99 @@
 namespace App\Controller\Api;
 
 use App\Entity\Empleado;
-use App\Repository\EmpleadoRepository;
-use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
-use Symfony\Component\HttpFoundation\Request;
+use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\Routing\Annotation\Route;
-use Symfony\Component\Serializer\SerializerInterface;
-use Symfony\Component\Serializer\Annotation\Groups;
-use Symfony\Component\Validator\Validator\ValidatorInterface;
-use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
 
-class EmpleadoController extends AbstractController
+#[Route('/api/empleados')]
+class EmpleadoController
 {
-    /**
-     * @Route("/api/empleados", name="api_empleados", methods={"GET"})
-     */
-    public function getEmpleados(EmpleadoRepository $empleadoRepository, SerializerInterface $serializer)
-    {
-        $empleados = $empleadoRepository->findAll();
-        $data = $serializer->serialize($empleados, 'json', ['groups' => 'empleado:read']);
+    private EntityManagerInterface $em;
 
-        return new JsonResponse($data, 200, [], true);
+    // Inyección de dependencias en el constructor
+    public function __construct(EntityManagerInterface $em)
+    {
+        $this->em = $em;
     }
 
-    /**
-     * @Route("/api/empleado", name="api_create_empleado", methods={"POST"})
-     */
-    public function createEmpleado(Request $request, SerializerInterface $serializer, EntityManagerInterface $entityManager, ValidatorInterface $validator)
+    #[Route('/', name: 'api_empleados_index', methods: ['GET'])]
+    public function index(): JsonResponse
     {
-        $data = $request->getContent();
-        $empleado = $serializer->deserialize($data, Empleado::class, 'json');
+        $empleados = $this->em->getRepository(Empleado::class)->findAll();
 
-        // Validar la entidad
-        $errors = $validator->validate($empleado);
-        if (count($errors) > 0) {
-            return new JsonResponse((string) $errors, 400);
-        }
+        $data = array_map(function ($empleado) {
+            return [
+                'id' => $empleado->getId(),
+                'nombre' => $empleado->getNombre(),
+                'email' => $empleado->getEmail(),
+                'rol' => $empleado->getRol(),
+            ];
+        }, $empleados);
 
-        $entityManager->persist($empleado);
-        $entityManager->flush();
-
-        return new JsonResponse('Empleado creado con éxito', 201);
+        return new JsonResponse($data);
     }
 
-    /**
-     * @Route("/api/empleado/{id}", name="api_get_empleado", methods={"GET"})
-     */
-    public function getEmpleado($id, EmpleadoRepository $empleadoRepository, SerializerInterface $serializer)
+    #[Route('/new', name: 'api_empleados_create', methods: ['POST'])]
+    public function create(Request $request): JsonResponse
     {
-        $empleado = $empleadoRepository->find($id);
+        $data = json_decode($request->getContent(), true);
+        $empleado = new Empleado();
+        $empleado->setNombre($data['nombre'] ?? 'Ivan Oviedo');
+        $empleado->setEmail($data['email'] ?? 'ivan@prueba.com');
+        $empleado->setPassword($data['password'] ?? '1234');
+        $empleado->setRoles($data['rol'] ?? ['trabajador']);
 
+        $this->em->persist($empleado);
+        $this->em->flush();
+
+        return new JsonResponse(['message' => 'Empleado creado', 'id' => $empleado->getId()], Response::HTTP_CREATED);
+    }
+
+    #[Route('/{id}', name: 'api_empleados_update', methods: ['PUT'])]
+    public function update(int $id, Request $request, EntityManagerInterface $em): JsonResponse
+    {
+        $empleado = $em->getRepository(Empleado::class)->find($id);
         if (!$empleado) {
-            return new JsonResponse('Empleado no encontrado', 404);
+            return new JsonResponse(['error' => 'Empleado no encontrado'], Response::HTTP_NOT_FOUND);
         }
 
-        $data = $serializer->serialize($empleado, 'json', ['groups' => 'empleado:read']);
-        return new JsonResponse($data, 200, [], true);
-    }
+        $data = json_decode($request->getContent(), true);
 
-    /**
-     * @Route("/api/empleado/{id}", name="api_update_empleado", methods={"PUT"})
-     */
-    public function updateEmpleado($id, Request $request, EmpleadoRepository $empleadoRepository, SerializerInterface $serializer, EntityManagerInterface $entityManager)
-    {
-        $empleado = $empleadoRepository->find($id);
-
-        if (!$empleado) {
-            return new JsonResponse('Empleado no encontrado', 404);
+        echo "<pre>";
+        print_r($data);
+        echo "</pre>";
+        if (isset($data['nombre'])) {
+            $empleado->setNombre($data['nombre']);
+        }
+        if (isset($data['email'])) {
+            $empleado->setEmail($data['email']);
+        }
+        if (isset($data['rol'])) {
+            $empleado->setRol($data['rol']);
+        }
+        if (isset($data['password'])) {
+            $empleado->setPassword($data['password']); // Lo encriptaremos más adelante
         }
 
-        $data = $request->getContent();
-        $serializer->deserialize($data, Empleado::class, 'json', ['object_to_populate' => $empleado]);
+        $em->flush();
 
-        $entityManager->flush();
-
-        return new JsonResponse('Empleado actualizado', 200);
+        return new JsonResponse(['message' => 'Empleado actualizado']);
     }
 
-    /**
-     * @Route("/api/empleado/{id}", name="api_delete_empleado", methods={"DELETE"})
-     */
-    public function deleteEmpleado($id, EmpleadoRepository $empleadoRepository, EntityManagerInterface $entityManager)
-    {
-        $empleado = $empleadoRepository->find($id);
-
-        if (!$empleado) {
-            return new JsonResponse('Empleado no encontrado', 404);
-        }
-
-        $entityManager->remove($empleado);
-        $entityManager->flush();
-
-        return new JsonResponse('Empleado eliminado', 200);
+    #[Route('/{id}', name: 'api_empleados_delete', methods: ['DELETE'])]
+public function delete(int $id, EntityManagerInterface $em): JsonResponse
+{
+    $empleado = $em->getRepository(Empleado::class)->find($id);
+    if (!$empleado) {
+        return new JsonResponse(['error' => 'Empleado no encontrado'], Response::HTTP_NOT_FOUND);
     }
+
+    $em->remove($empleado);
+    $em->flush();
+
+    return new JsonResponse(['message' => 'Empleado eliminado']);
+}
+
 }
